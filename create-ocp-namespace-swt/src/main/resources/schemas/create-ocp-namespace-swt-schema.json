@@ -15,11 +15,21 @@
       "type": "string",
       "description": "The requester of the namespace",
       "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
-    }, 
+    },
+    "size": {
+      "title": "Size",
+      "type": "string",
+      "description": "The size of the namespace (small, large). A large namespace requires approval.",
+      "enum": [
+        "small",
+        "large"
+      ]
+    },
     "reason": {
       "title": "Reason",
       "type": "string",
-      "description": "The reason a large namespace is required"
+      "description": "The reason a large namespace is required",
+      "default": ""
     },    
     "recipients": {
       "title": "Recipients",
@@ -36,6 +46,7 @@
   "required": [
     "namespace",
     "requester",
+    "size",
     "reason",
     "recipients"
   ]

@@ -39,7 +39,7 @@ functions:
     operation: '{
       "result": {
       "completedWith":"error",
-      "message": "Launching software template " + $SECRET.software_template_ref + " failed.",
+      "message": "Launching software template failed.",
       "outputs":[]
       }
       }'
@@ -71,8 +71,23 @@ functions:
             }]
           }
       }'
-start: GetGitlabProjectId
+start: NamespaceSizeSwitch
 states:
+  - name: NamespaceSizeSwitch
+    type: switch
+    dataConditions:
+      - name: Namespace small
+        condition: .size == "small"
+        transition:
+          nextState: LaunchSoftwareTemplateSmall
+      - name: Namespace large
+        condition: .size == "large"
+        transition:
+          nextState: GetGitlabProjectId
+    defaultCondition:
+      transition:
+        nextState: LaunchSoftwareTemplateSmall
+    usedForCompensation: false
   - name: GetGitlabProjectId
     type: operation
     actions:
@@ -138,17 +153,31 @@ states:
         transition: SendNotificationRequestDenied
       - name: Resource request authorized
         condition: (.getIssueResult.labels|length > 0) and (.getIssueResult.labels[0] == "approved")
-        transition: LaunchSoftwareTemplate
+        transition: LaunchSoftwareTemplateLarge
     defaultCondition:
       transition: PollIssue
-  - name: LaunchSoftwareTemplate
+  - name: LaunchSoftwareTemplateLarge
     type: operation
     actions:
       - name: 'Launch Software Template'
         functionRef:
           refName: launchSoftwareTemplate
           arguments:
-            templateRef: $SECRET.software_template_ref
+            templateRef: $SECRET.swt_ref_ns_large
+            values:
+              component_id: .namespace
+              namespace_owner: .requester
+        actionDataFilter:
+          toStateData: .launchedTemplate
+    transition: GetSoftwareTemplate
+  - name: LaunchSoftwareTemplateSmall
+    type: operation
+    actions:
+      - name: 'Launch Software Template'
+        functionRef:
+          refName: launchSoftwareTemplate
+          arguments:
+            templateRef: $SECRET.swt_ref_ns_small
             values:
               component_id: .namespace
               namespace_owner: .requester
@@ -202,7 +231,7 @@ states:
               topic: "Create OCP Namespace workflow"
               link: '$SECRET.rhdh_url + "/catalog/default/component/" + .namespace'
               severity: "normal"
-    transition: CloseIssue
+    transition: CloseIssueSwitch
   - name: SendTaskFailureNotification
     type: operation
     actions:
@@ -220,7 +249,20 @@ states:
               description: '"Namespace " + .namespace + " could not be created"'
               topic: "Create OCP Namespace workflow"
               severity: "high"
-    transition: CloseIssue 
+    transition: CloseIssueSwitch
+  - name: CloseIssueSwitch
+    type: switch
+    dataConditions:
+      - name: Namespace small
+        condition: .size == "small"
+        end: true
+      - name: Namespace large
+        condition: .size == "large"
+        transition:
+          nextState: CloseIssue
+    defaultCondition:
+      end: true
+    usedForCompensation: false
   - name: CloseIssue
     type: operation
     actionMode: sequential
@@ -255,8 +297,6 @@ states:
   - name: CloseIssueDenied
     type: operation
     actionMode: sequential
-    metadata:
-      errorMessage: '"Creation of namespace " + .namespace + " denied"'
     actions:
       - name: setOutput
         functionRef:
